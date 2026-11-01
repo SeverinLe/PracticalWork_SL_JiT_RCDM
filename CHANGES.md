@@ -87,7 +87,7 @@ and `scripts/train.py`.
 | fixed sin-cos `pos_embed` **and** RoPE | RoPE only `[fix-5b]` | |
 | timestep MLP: freq 256 → hidden → hidden | sinusoidal(`cond_dim`) → 4·`cond_dim` → `cond_dim` | |
 | null class = extra embedding row | learnable `null_h ∈ ℝ^{h_dim}`, before the projector, in the EMA `[fix-3]` | dropout probability 0.1 in both |
-| **v-loss** `‖v − v̂‖²`, `(1−t)` clamped at 0.05 | **x-loss** `‖x − x̂‖²` | equivalent to JiT's loss reweighted by `(1−t)²`, which down-weights the clean end of the path. Not a tagged fix |
+| **v-loss** `‖v − v̂‖²`, `(1−t)` clamped at 0.05 | **x-loss** `‖x − x̂‖²` by default; JiT's v-loss via `--loss_space v` `[fix-6]` | x-loss is JiT's loss reweighted by `(1−t)²`, which down-weights the clean end of the path. All reported generators use x-loss |
 | CFG blended on velocity, optional t-interval | CFG blended on `x̂`, no interval | identical at a given `(z, t)`, since `v` is affine in `x̂`; JiT's default interval [0, 1] is also the full range |
 | two EMAs (0.9999, 0.9996) | one EMA (0.9999), always applied on load | |
 | lr = 5e-5 · batch / 256, constant | lr 1e-4, linear warmup 2000 steps, then constant `[fix-4c]`; grad-norm clip 1.0 | |

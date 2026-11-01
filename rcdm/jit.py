@@ -519,7 +519,19 @@ class FlowMatching:
         z_t = t·x + (1−t)·ε         linear interpolation (flow path)
         t ~ logit-normal(mu, sigma)  [fix-4b] mu=-0.8, sigma=0.8 (JiT Tab. 3)
         h → null_h  with prob p_uncond  [fix-3] learnable null token for CFG
-        loss = ||f_θ(z_t, t, h) − x||²   MSE in *image* space
+        loss_space="x" (default):  loss = ||x̂ − x||²            MSE in image space
+        loss_space="v" (JiT):      loss = ||v̂ − v||²            MSE in velocity space
+                                   v = (x − z_t) / max(1−t, t_eps), v̂ likewise from x̂
+
+    [fix-6] The two losses share their minimiser at every (z_t, t) — the
+    network predicts x in both — but v-loss equals x-loss weighted by
+    1 / max(1−t, t_eps)², i.e. up to 400× more weight at the clean end.  That
+    is the weight the Heun sampler applies to an x̂ error when it converts to
+    velocity, so v-loss penalises errors where the sampler amplifies them.
+    Upstream JiT (denoiser.py) trains with v-loss and t_eps = 0.05.  Every
+    generator reported before this flag existed was trained with x-loss, which
+    is why "x" stays the default: an existing checkpoint's objective must stay
+    what its model_cfg says it was.
 
     The t-sampler decides how training effort is allocated along the noise-to-
     data axis, and t=0 is pure noise while t=1 is the clean image.  At low t the
@@ -543,7 +555,10 @@ class FlowMatching:
         space, numerically cleaner than blending velocities directly.
     """
 
-    def __init__(self, t_mu: float = -0.8, t_sigma: float = 0.8):
+    LOSS_SPACES = ("x", "v")
+
+    def __init__(self, t_mu: float = -0.8, t_sigma: float = 0.8,
+                 loss_space: str = "x", t_eps: float = 0.05):
         """
         Args:
             t_mu:    logit-normal mean.  -0.8 = JiT Tab. 3 (median t 0.31);
@@ -552,9 +567,19 @@ class FlowMatching:
                      where instance-specific detail is synthesised.
             t_sigma: logit-normal std.  Wider spreads effort over more of the
                      axis at the cost of density anywhere.
+            loss_space: "x" (image-space MSE, this repo's original objective) or
+                     "v" (velocity-space MSE, upstream JiT).  See [fix-6] above.
+            t_eps:   floor on (1 − t) for the v-loss conversion, so the weight
+                     is capped at 1/t_eps² instead of diverging at t → 1.
+                     0.05 = JiT main_jit.py default.  Unused for "x".
         """
+        if loss_space not in self.LOSS_SPACES:
+            raise ValueError(f"loss_space must be one of {self.LOSS_SPACES}; "
+                             f"got '{loss_space}'")
         self.t_mu = t_mu
         self.t_sigma = t_sigma
+        self.loss_space = loss_space
+        self.t_eps = t_eps
 
     def training_loss(
         self,
@@ -599,7 +624,17 @@ class FlowMatching:
         z_t     = t_view * x + (1.0 - t_view) * epsilon
 
         x_pred = model(z_t, t, h=h)
-        return F.mse_loss(x_pred, x)
+        if self.loss_space == "x":
+            return F.mse_loss(x_pred, x)
+
+        # ── JiT-RCDM [fix-6]: v-loss, as upstream JiT denoiser.py ──
+        # The network still predicts x; both target and prediction are mapped
+        # to velocity with the same clamped (1 − t), so the clamp caps the
+        # weight without biasing the target.
+        denom  = (1.0 - t_view).clamp_min(self.t_eps)
+        v      = (x - z_t) / denom
+        v_pred = (x_pred - z_t) / denom
+        return F.mse_loss(v_pred, v)
 
     @torch.no_grad()
     def sample(

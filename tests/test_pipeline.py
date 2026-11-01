@@ -175,6 +175,37 @@ def test_flow_matching_sampler_runs():
     assert torch.isfinite(out).all(), "sampler produced NaN/inf"
 
 
+def test_v_loss_is_weighted_x_loss():
+    """
+    [fix-6] v-loss must equal x-loss weighted by 1/max(1-t, t_eps)^2, per
+    sample.  Checked against an independent computation with the same t and ε
+    draws, so a sign or clamp error in the conversion fails here rather than
+    surfacing as a subtly different generator.
+    """
+    model = JiT_S_16(image_size=224, h_dim=384)
+    x, h = torch.rand(4, 3, 224, 224) * 2 - 1, torch.randn(4, 384)
+
+    def draws(seed):
+        torch.manual_seed(seed)
+        u = -0.8 + 0.8 * torch.randn(4)
+        return torch.sigmoid(u), torch.randn_like(x)
+
+    with torch.no_grad():
+        torch.manual_seed(0)
+        v_loss = FlowMatching(loss_space="v", t_eps=0.05).training_loss(model, x, h)
+
+        t, eps = draws(0)
+        t_view = t.view(4, 1, 1, 1)
+        z_t = t_view * x + (1 - t_view) * eps
+        err = (model(z_t, t, h=h) - x) ** 2
+        weight = 1.0 / (1 - t_view).clamp_min(0.05) ** 2
+        expected = (err * weight).mean()
+
+    assert torch.allclose(v_loss, expected, rtol=1e-4), (v_loss, expected)
+    # The default must stay x-loss: every reported generator was trained with it.
+    assert FlowMatching().loss_space == "x"
+
+
 def test_representation_cache_alignment():
     """
     reps[i] must belong to paths[i]. Nothing downstream re-checks this, so a

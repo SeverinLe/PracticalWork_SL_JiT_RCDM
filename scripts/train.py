@@ -192,6 +192,11 @@ def _model_cfg(model, args) -> dict:
         # Recording it is what lets an experiment attribute behaviour correctly.
         "t_mu":       args.t_mu,
         "t_sigma":    args.t_sigma,
+        # [fix-6] Same reasoning: x-loss and v-loss share an optimum but spend
+        # capacity at different t.  Checkpoints from before the flag carry no
+        # key and were trained with "x".
+        "loss_space": args.loss_space,
+        "t_eps":      args.t_eps,
     }
 
 
@@ -282,6 +287,15 @@ def main():
                              "conditional mean or a conditional distribution.")
     parser.add_argument("--t_sigma",       type=float, default=0.8,
                         help="Logit-normal t-sampler std (JiT Tab. 3: 0.8).")
+    # ── JiT-RCDM [fix-6]: loss space ──
+    parser.add_argument("--loss_space",    type=str,   default="x",
+                        choices=FlowMatching.LOSS_SPACES,
+                        help="'x' = MSE on the clean image (every generator "
+                             "reported so far); 'v' = MSE on the velocity, as "
+                             "upstream JiT — x-loss weighted by 1/max(1-t, t_eps)^2.")
+    parser.add_argument("--t_eps",         type=float, default=0.05,
+                        help="Floor on (1-t) in the v-loss conversion (JiT: 0.05). "
+                             "Ignored for --loss_space x.")
     parser.add_argument("--cfg_dropout",       type=float, default=0.1,
                         help="Probability of replacing h with zeros during training "
                              "(null-h CFG dropout). Set to 0.0 to disable CFG entirely. "
@@ -349,14 +363,29 @@ def main():
         )
     model.to(device)
 
-    flow = FlowMatching(t_mu=args.t_mu, t_sigma=args.t_sigma)
+    flow = FlowMatching(t_mu=args.t_mu, t_sigma=args.t_sigma,
+                        loss_space=args.loss_space, t_eps=args.t_eps)
     print(f"  t-sampler: logit-normal(mu={args.t_mu}, sigma={args.t_sigma})")
+    print(f"  loss: {args.loss_space}-space MSE"
+          + (f" (t_eps={args.t_eps})" if args.loss_space == "v" else ""))
 
     # Restore checkpoint (read wandb run_id for seamless run resumption)
     wandb_run_id = args.wandb_run_id
     if args.resume:
         print(f"  Resuming from {args.resume}")
         state      = torch.load(args.resume, map_location=device)
+        # ── JiT-RCDM [fix-6]: a resumed run must keep its objective.  Without
+        # this, forgetting --loss_space on resume silently trains the second
+        # half of the run on a different loss and the checkpoint's model_cfg
+        # then describes only the half that wrote it.  No key = trained before
+        # the flag existed = "x".
+        ckpt_loss = state.get("model_cfg", {}).get("loss_space", "x")
+        if ckpt_loss != args.loss_space:
+            raise ValueError(
+                f"--loss_space {args.loss_space} contradicts {args.resume}, which "
+                f"was trained with loss_space '{ckpt_loss}'. Pass --loss_space "
+                f"{ckpt_loss} to resume it."
+            )
         model.load_state_dict(state["model"])
         start_step = state["step"]
         wandb_run_id = wandb_run_id or state.get("wandb_run_id")
