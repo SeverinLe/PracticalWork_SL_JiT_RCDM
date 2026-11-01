@@ -1,0 +1,50 @@
+# JiT-RCDM — Python dependencies
+#
+# Versions below are the ones this environment actually runs: Python 3.13.12 on
+# macOS/Apple Silicon (MPS) for representation caching and experiments, and
+# Google Colab (NVIDIA A100) for training.
+#
+#   uv python install 3.13
+#   uv venv .venv --python 3.13 && source .venv/bin/activate
+#   pip install -r requirements.txt
+#
+# Use a uv-managed interpreter, not a Homebrew one: a `brew uninstall python@3.13`
+# (or a major brew upgrade) deletes the binary the venv symlinks to, and every
+# script then fails with "no such file or directory: .venv/bin/python".
+#
+# Install PyTorch first if you need a specific CUDA build:
+#   https://pytorch.org/get-started/locally/
+
+# ── Core: model, data, encoders ──────────────────────────────────────────────
+torch==2.11.0
+torchvision==0.26.0
+numpy==2.4.4
+pillow==12.2.0
+tqdm==4.67.3
+
+# RETFound ViT-Large is instantiated through timm; DinoV3 through transformers.
+# huggingface_hub is pinned by transformers 4.57 to the 0.x line — do not raise
+# it to 1.x without checking, the two are not compatible.
+timm==1.0.27
+transformers==4.57.6
+huggingface_hub==0.36.2
+safetensors==0.8.0
+
+# ── Experiments: metrics, statistics, figures ────────────────────────────────
+# E1 FID, E2 SSIM, E3 Wilcoxon, E5 linear probe + bootstrap CIs
+scikit-learn==1.9.0
+scikit-image==0.26.0
+scipy==1.18.0
+matplotlib==3.11.1
+pandas==3.0.5
+
+# E1 only; skipped gracefully with --skip_fid if absent.
+pytorch-fid==0.3.0
+
+# E2 lpips_between; the column is written as NaN if absent, everything else in
+# E2 still runs.  Pulls an AlexNet checkpoint on first use.
+lpips==0.1.4
+
+# ── Experiment tracking (optional) ───────────────────────────────────────────
+# Every script runs without it; pass --no_wandb to disable.
+wandb==0.28.1

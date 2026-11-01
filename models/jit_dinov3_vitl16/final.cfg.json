@@ -1,0 +1,20 @@
+{
+  "file": "jit_rcdm_final.pt",
+  "step": 100000,
+  "has_ema": true,
+  "wandb_run_id": "dfjj1g7h",
+  "sha256": "c13fd666beab63fa7c8df608aedf65476f81095c7c7cf8ae768da322be005b41",
+  "size_bytes": 412336319,
+  "model_cfg": {
+    "encoder": "dinov3_vitl16",
+    "image_size": 224,
+    "patch_size": 16,
+    "hidden_dim": 384,
+    "depth": 12,
+    "num_heads": 6,
+    "h_dim": 1024,
+    "cond_dim": 128,
+    "t_mu": -0.8,
+    "t_sigma": 0.8
+  }
+}

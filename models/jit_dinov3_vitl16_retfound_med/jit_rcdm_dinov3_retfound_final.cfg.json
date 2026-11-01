@@ -1,0 +1,20 @@
+{
+  "file": "jit_rcdm_dinov3_retfound_final.pt",
+  "step": 100000,
+  "has_ema": true,
+  "wandb_run_id": "qp2b6wu1",
+  "sha256": "498f390029b2969a4421d8db7106fca6c40c0f95df0c51158bc7045066ec09bf",
+  "size_bytes": 412336319,
+  "model_cfg": {
+    "encoder": "retfound_dinov3",
+    "image_size": 224,
+    "patch_size": 16,
+    "hidden_dim": 384,
+    "depth": 12,
+    "num_heads": 6,
+    "h_dim": 1024,
+    "cond_dim": 128,
+    "t_mu": -0.8,
+    "t_sigma": 0.8
+  }
+}
