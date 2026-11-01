@@ -9,7 +9,6 @@ Notation: `x` is the clean image in `[-1, 1]`, `ε ~ N(0, I)`, and `t ∈ [0, 1]
 where `t = 0` is pure noise and `t = 1` is data. The network outputs `x̂`.
 
 ---
-
 ## 1. Side by side
 
 | Step | JiT | JiT-RCDM (this repo) |
@@ -54,15 +53,13 @@ Relative to JiT, our objective down-weights the clean end of the path
 is the same conditional mean `E[x | z_t, h]`. The weighting changes which `t`
 the limited capacity is spent on, not what the optimum is.
 
-This was not a deliberate choice. The loss was written as `F.mse_loss(x_pred,
-x)` in the first implementation (commit `99fc546`), and the docs conflated
-"x-prediction" with "x-loss". It is untagged and applies identically to all
-four trained generators.
+This was a choice I regret and cannot remember why I changed it: "x-prediction" with "x-loss" - it is untagged and applies identically to all
+four trained generators. 
 
 *Open question, not a result:* together with `t_mu = −0.8`, x-loss puts most
 of the training signal at noisy `t`, where the MSE-optimal `x̂ ≈ E[x | h]`
 ignores `z_t`. That is one candidate cause of the generators being
-deterministic in `h`. Testing it requires retraining with a v-loss.
+deterministic in `h`. Testing it requires retraining with a v-loss which will be done and reported on in the upcoming master thesis.
 
 ### 2.2 CFG blend: on `x̂` (ours) vs on `v` (JiT): equivalent
 
@@ -125,9 +122,6 @@ Each of these failed silently: the model ran, but the numbers were wrong.
 
 ### C. Restoring the JiT recipe
 
-An earlier draft deviated from JiT on these points, so they were fixed rather
-than designed.
-
 10. t-sampler `σ(N(−0.8, 0.8))` instead of `σ(N(0, 1))` `[fix-4b]`.
 11. AdamW β₂ = 0.95 `[fix-4a]`. Linear LR warmup `[fix-4c]`.
 12. RMSNorm, 2D RoPE, QK-norm and SwiGLU in place of LayerNorm, learned
@@ -140,7 +134,5 @@ than designed.
   1024.
 - **`JiT_S_16` preset** (hidden 384, depth 12, ≈ 25.7 M params) and **224 px**
   instead of JiT-B and 256 px, sized for 972 training images and one A100.
-- **x-loss instead of v-loss** (§2.1). Unintended, but it is the objective
-  every reported generator was trained with.
 - **Single EMA, no CFG interval.** Simplifications that are equivalent at
   JiT's defaults.
